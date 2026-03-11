@@ -1,0 +1,45 @@
+# Claude local development tools
+.claude/
+CLAUDE.md
+
+# Rust build artifacts
+/target
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Environment files
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Test artifacts / generated datasets
+testdata/generated/
+
+# Mac system files
+.AppleDouble
+.LSOverride
+
+# Rust profiling / debugging
+*.prof
+*.dSYM
+
+# Misc
+node_modules/
+coverage/
