@@ -1,0 +1,31 @@
+[package]
+name = "aegoria-rust"
+version = "0.1.0"
+edition = "2024"
+description = "Aegoria cybersecurity telemetry engine"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+# file watching for streaming mode
+notify = "8"
+# cli argument parsing
+clap = { version = "4", features = ["derive"] }
+# directory traversal
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "pipeline_benchmark"
+harness = false
