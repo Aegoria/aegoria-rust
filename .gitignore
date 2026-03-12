@@ -1,7 +1,3 @@
-# backups and quality checks
-.claude/
-CLAUDE.md
-
 # rust build artifacts
 /target
 Cargo.lock
@@ -43,3 +39,7 @@ testdata/generated/
 # misc
 node_modules/
 coverage/
+
+# backups and quality checks
+.claude/
+CLAUDE.md

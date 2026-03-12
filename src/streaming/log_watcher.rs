@@ -39,11 +39,9 @@ impl LogWatcher {
                     Ok(0) => break, // no new data
                     Ok(_) => {
                         let trimmed = line.trim().to_string();
-                        if !trimmed.is_empty() {
-                            if tx.send(trimmed).await.is_err() {
-                                info!("watcher channel closed for {}", path.display());
-                                return Ok(());
-                            }
+                        if !trimmed.is_empty() && tx.send(trimmed).await.is_err() {
+                            info!("watcher channel closed for {}", path.display());
+                            return Ok(());
                         }
                     }
                     Err(e) => {

@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use super::server::AppState;
 use crate::analyzer::Analyzer;
 use crate::analyzer::behavior_engine::BehaviorEngine;
+use crate::analyzer::timeline::AttackTimeline;
 use crate::collector::Collector;
 use crate::collector::authlog_reader::AuthLogReader;
 use crate::collector::syslog_reader::SyslogReader;
@@ -20,6 +21,7 @@ use crate::parser::log_parser::LogParser;
 use crate::reports::recommendation_engine::RecommendationEngine;
 use crate::reports::report_builder::SecurityReport;
 use crate::risk::scoring_engine::ScoringEngine;
+use crate::threat_intel::intel_engine::IntelEngine;
 
 pub async fn health() -> &'static str {
     "ok"
@@ -98,6 +100,10 @@ pub async fn post_scan(
 
     let events_parsed = all_events.len();
 
+    // enrich with threat intelligence
+    let intel = IntelEngine::default();
+    intel.enrich_batch(&mut all_events);
+
     // analyze
     let analysis = BehaviorEngine.analyze(&all_events);
     let events_analyzed = events_parsed;
@@ -108,7 +114,7 @@ pub async fn post_scan(
 
     // recommendations + report
     let recommendations = RecommendationEngine.generate(&analysis);
-    let report = SecurityReport::build(&risk, &analysis, events_parsed, recommendations);
+    let report = SecurityReport::build(&risk, &analysis, &all_events, recommendations);
 
     let risk_level_str = format!("{:?}", report.risk_level).to_lowercase();
     let risk_score_val = report.risk_score;
@@ -133,4 +139,36 @@ pub async fn post_scan(
         risk_level: risk_level_str,
         duration_ms,
     }))
+}
+
+// start real-time log streaming
+pub async fn post_stream_start(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let config = &state.config;
+    let syslog = std::path::Path::new(&config.syslog_path);
+    let authlog = std::path::Path::new(&config.authlog_path);
+
+    let mut stream = state.stream.write().await;
+    stream.start(syslog, authlog, state.report.clone()).await;
+
+    Ok(Json(serde_json::json!({ "status": "streaming started" })))
+}
+
+// stop real-time log streaming
+pub async fn post_stream_stop(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let mut stream = state.stream.write().await;
+    stream.stop().await;
+    Json(serde_json::json!({ "status": "streaming stopped" }))
+}
+
+// get attack timeline from current report
+pub async fn get_timeline(
+    State(state): State<AppState>,
+) -> Result<Json<AttackTimeline>, StatusCode> {
+    let report = state.report.read().await;
+    match report.as_ref() {
+        Some(r) => Ok(Json(r.attack_timeline.clone())),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
