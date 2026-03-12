@@ -158,7 +158,9 @@ async fn process_stream(
         let analysis = BehaviorEngine.analyze(&batch);
         let risk = ScoringEngine.score(&analysis);
         let recs = RecommendationEngine.generate(&analysis);
-        let new_report = SecurityReport::build(&risk, &analysis, &batch, recs);
+        let latency = start.elapsed().as_millis();
+        let new_report =
+            SecurityReport::build_with_latency(&risk, &analysis, &batch, recs, latency);
 
         {
             let mut stored = report.write().await;
@@ -169,7 +171,7 @@ async fn process_stream(
             "stream batch: {} events, score={}, duration_ms={}",
             batch.len(),
             risk.total_score,
-            start.elapsed().as_millis()
+            latency
         );
 
         batch.clear();

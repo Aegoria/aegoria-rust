@@ -95,7 +95,15 @@ fn classify_event(process_name: &str, message: &str) -> EventType {
     {
         return EventType::FileAccess;
     }
-    if msg.contains("exec") || msg.contains("started") || msg.contains("command") {
+    if msg.contains("exec")
+        || msg.contains("started")
+        || msg.contains("command")
+        || msg.contains("scan")
+        || msg.contains("brute force")
+        || msg.contains("crack")
+        || msg.contains("loading")
+        || msg.contains("fuzzing")
+    {
         return EventType::ProcessExecution;
     }
 
