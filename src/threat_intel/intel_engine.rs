@@ -49,9 +49,9 @@ impl Default for IntelEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use crate::core::log_source::LogSource;
     use crate::core::telemetry_event::{EventType, Severity};
+    use chrono::Utc;
 
     #[test]
     fn enriches_malicious_source_ip() {
@@ -67,7 +67,11 @@ mod tests {
         );
         event.source_ip = Some("45.33.32.156".into());
         engine.enrich(&mut event);
-        assert!(event.threat_tags.contains(&"known malicious source".to_string()));
+        assert!(
+            event
+                .threat_tags
+                .contains(&"known malicious source".to_string())
+        );
     }
 
     #[test]
@@ -92,14 +96,22 @@ mod tests {
         let engine = IntelEngine::new();
         let mut events = vec![
             TelemetryEvent::new(
-                "d".into(), "h".into(), Utc::now(),
-                EventType::Authentication, LogSource::AuthLog,
-                Severity::High, "raw".into(),
+                "d".into(),
+                "h".into(),
+                Utc::now(),
+                EventType::Authentication,
+                LogSource::AuthLog,
+                Severity::High,
+                "raw".into(),
             ),
             TelemetryEvent::new(
-                "d".into(), "h".into(), Utc::now(),
-                EventType::Authentication, LogSource::AuthLog,
-                Severity::High, "raw".into(),
+                "d".into(),
+                "h".into(),
+                Utc::now(),
+                EventType::Authentication,
+                LogSource::AuthLog,
+                Severity::High,
+                "raw".into(),
             ),
         ];
         events[0].source_ip = Some("45.33.32.156".into());

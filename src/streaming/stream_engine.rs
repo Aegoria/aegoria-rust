@@ -9,9 +9,9 @@ use tracing::{info, warn};
 use crate::analyzer::Analyzer;
 use crate::analyzer::behavior_engine::BehaviorEngine;
 use crate::core::telemetry_event::TelemetryEvent;
+use crate::parser::Parser;
 use crate::parser::auth_parser::AuthParser;
 use crate::parser::log_parser::LogParser;
-use crate::parser::Parser;
 use crate::reports::recommendation_engine::RecommendationEngine;
 use crate::reports::report_builder::SecurityReport;
 use crate::risk::scoring_engine::ScoringEngine;
@@ -24,6 +24,12 @@ pub struct StreamState {
     pub running: Arc<RwLock<bool>>,
     handles: Vec<JoinHandle<()>>,
     processor: Option<JoinHandle<()>>,
+}
+
+impl Default for StreamState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamState {
@@ -55,13 +61,15 @@ impl StreamState {
 
         // spawn watchers for each log source
         if syslog_path.exists() {
-            self.handles.push(log_watcher::spawn_watcher(syslog_path, tx.clone()));
+            self.handles
+                .push(log_watcher::spawn_watcher(syslog_path, tx.clone()));
         } else {
             warn!("syslog not found, skipping: {}", syslog_path.display());
         }
 
         if authlog_path.exists() {
-            self.handles.push(log_watcher::spawn_watcher(authlog_path, tx.clone()));
+            self.handles
+                .push(log_watcher::spawn_watcher(authlog_path, tx.clone()));
         } else {
             warn!("auth log not found, skipping: {}", authlog_path.display());
         }
@@ -150,7 +158,7 @@ async fn process_stream(
         let analysis = BehaviorEngine.analyze(&batch);
         let risk = ScoringEngine.score(&analysis);
         let recs = RecommendationEngine.generate(&analysis);
-        let new_report = SecurityReport::build(&risk, &analysis, batch.len(), recs);
+        let new_report = SecurityReport::build(&risk, &analysis, &batch, recs);
 
         {
             let mut stored = report.write().await;

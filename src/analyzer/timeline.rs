@@ -43,10 +43,7 @@ impl AttackTimeline {
 }
 
 fn describe_event(event: &TelemetryEvent) -> String {
-    let process = event
-        .process_name
-        .as_deref()
-        .unwrap_or("unknown");
+    let process = event.process_name.as_deref().unwrap_or("unknown");
 
     match event.event_type {
         EventType::Authentication => {
@@ -94,16 +91,24 @@ mod tests {
         let later = Utc::now();
 
         let mut e1 = TelemetryEvent::new(
-            "d".into(), "h".into(), later,
-            EventType::PrivilegeEscalation, LogSource::AuthLog,
-            Severity::Medium, "raw".into(),
+            "d".into(),
+            "h".into(),
+            later,
+            EventType::PrivilegeEscalation,
+            LogSource::AuthLog,
+            Severity::Medium,
+            "raw".into(),
         );
         e1.username = Some("admin".into());
 
         let mut e2 = TelemetryEvent::new(
-            "d".into(), "h".into(), earlier,
-            EventType::Authentication, LogSource::AuthLog,
-            Severity::High, "raw".into(),
+            "d".into(),
+            "h".into(),
+            earlier,
+            EventType::Authentication,
+            LogSource::AuthLog,
+            Severity::High,
+            "raw".into(),
         );
         e2.username = Some("root".into());
         e2.source_ip = Some("10.0.0.1".into());
@@ -119,9 +124,13 @@ mod tests {
     #[test]
     fn filters_info_severity() {
         let event = TelemetryEvent::new(
-            "d".into(), "h".into(), Utc::now(),
-            EventType::SystemEvent, LogSource::Syslog,
-            Severity::Info, "raw".into(),
+            "d".into(),
+            "h".into(),
+            Utc::now(),
+            EventType::SystemEvent,
+            LogSource::Syslog,
+            Severity::Info,
+            "raw".into(),
         );
         let timeline = AttackTimeline::build(&[event]);
         assert!(timeline.events.is_empty());

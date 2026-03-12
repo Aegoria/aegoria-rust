@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::analyzer::AnalysisResult;
+use crate::analyzer::timeline::AttackTimeline;
 use crate::core::risk_score::{RiskLevel, RiskScore};
+use crate::core::telemetry_event::TelemetryEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -23,6 +25,7 @@ pub struct SecurityReport {
     pub detected_threats: DetectedThreats,
     pub correlation_findings: Vec<String>,
     pub recommendations: Vec<String>,
+    pub attack_timeline: AttackTimeline,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,7 +40,7 @@ impl SecurityReport {
     pub fn build(
         risk: &RiskScore,
         analysis: &AnalysisResult,
-        events_processed: usize,
+        events: &[TelemetryEvent],
         recommendations: Vec<String>,
     ) -> Self {
         let system_health = match risk.level {
@@ -46,10 +49,12 @@ impl SecurityReport {
             RiskLevel::High | RiskLevel::Critical => SystemHealth::Critical,
         };
 
+        let attack_timeline = AttackTimeline::build(events);
+
         Self {
             timestamp: Utc::now(),
             system_health,
-            events_processed,
+            events_processed: events.len(),
             risk_score: risk.total_score,
             risk_level: risk.level.clone(),
             detected_threats: DetectedThreats {
@@ -60,6 +65,7 @@ impl SecurityReport {
             },
             correlation_findings: analysis.correlation_findings.clone(),
             recommendations,
+            attack_timeline,
         }
     }
 }

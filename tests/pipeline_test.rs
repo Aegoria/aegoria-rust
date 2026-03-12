@@ -67,7 +67,7 @@ fn full_pipeline_produces_report() {
     assert!(!recs.is_empty(), "should produce recommendations");
 
     // build report
-    let report = SecurityReport::build(&risk, &analysis, events.len(), recs);
+    let report = SecurityReport::build(&risk, &analysis, &events, recs);
     assert_eq!(report.events_processed, 8);
     assert!(report.risk_score > 0);
     assert!(!report.correlation_findings.is_empty());
