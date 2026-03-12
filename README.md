@@ -1,300 +1,98 @@
-## Aegoria Telemetry Engine
-**observe. detect. protect.**
+# aegoria-rust
 
-Aegoria is a lightweight telemetry engine that turns raw system logs into structured security intelligence.
+the core telemetry engine of the aegoria platform. this is where raw system logs become structured security intelligence.
 
-Instead of manually digging through thousands of log lines, Aegoria collects logs, parses them into structured events, analyzes behavioral patterns, correlates suspicious activity, and generates a clear security report through a simple API.
-
-The goal of this project is to demonstrate a complete **security telemetry pipeline** — from log ingestion to threat analysis and reporting.
+aegoria-rust reads logs from the operating system, parses them into normalized telemetry events, runs behavioral analysis, correlates suspicious patterns, scores risk, and outputs a structured security report. it's the foundation that everything else in aegoria builds on.
 
 ---
 
-## What Aegoria Does
+## what this does
 
-At a high level, Aegoria converts messy log data into actionable insights.
+at its core, this is a detection pipeline:
 
-Pipeline overview:
+```
+system logs
+  → collectors (syslog, auth logs)
+  → parsers (structured telemetry events)
+  → threat intelligence enrichment
+  → behavioral analysis
+  → correlation engine
+  → risk scoring
+  → security report
+  → REST API / CLI output
+```
 
-System Logs > Collectors > Parsers > Telemetry Events > Threat Intelligence Enrichment > Behavioral Analysis > Correlation Engine > Risk Scoring > Security Report > API / CLI Output
-
-
-The result is a structured report describing system activity, potential threats, and recommended actions.
+it takes messy, unstructured log data and turns it into something you can actually reason about — a JSON report with detected threats, an attack timeline, risk scores, and recommended actions.
 
 ---
 
-## Core Capabilities
+## how it fits into aegoria
 
-### Log Ingestion
-Reads logs from system sources such as:
+this repository is the first stage of the pipeline. it produces the `SecurityReport` JSON that feeds into everything downstream:
 
-- syslog
-- authentication logs
+- the **ai-model** consumes this report and runs deeper ML-based threat analysis
+- the **monitoring dashboard** stores and visualizes the results
+- the **pipeline orchestrator** coordinates all three
 
-### Structured Telemetry Events
-Every log entry is normalized into a consistent `TelemetryEvent` structure.
-
-### Behavioral Anomaly Detection
-Detects suspicious activity patterns such as:
-
-- repeated login failures
-- privilege escalation
-- suspicious process execution
-- abnormal network behavior
-
-### Threat Intelligence Enrichment
-Events are enriched with known malicious indicators such as suspicious IP addresses.
-
-### Attack Timeline Reconstruction
-Events are reconstructed chronologically to help understand how an attack unfolded.
-
-### Risk Scoring
-Security risk is calculated using a weighted scoring system.
-
-### Security Reporting
-The system produces a structured JSON report containing:
-
-- detected threats
-- risk level
-- attack timeline
-- recommendations
+the rust engine doesn't know about the AI layer or the dashboard. it just does its job — collect, parse, analyze, report — and exposes the results through a clean API.
 
 ---
 
-## Architecture
+## key components
 
-built as a modular pipeline.
-
-logs
-  │
-collector
-  │
-parser
-  │
-telemetry events
-  │
-behavior engine
-  │
-correlation engine
-  │
-risk scoring
-  │
-report builder
-  │
-api / cli
-
---- 
-
-## Project Structure
-
-src/
-  core/           core data structures
-  collector/      log ingestion
-  parser/         log parsing
-  analyzer/       anomaly detection and correlation
-  risk/           risk scoring engine
-  reports/        report generation
-  threat_intel/   threat enrichment
-  streaming/      real-time log monitoring
-  api/            REST API server
-  utils/          configuration and helpers
-  cli/            command line tools
-
-tests/
-  integration and dataset tests
-
-testdata/
-  synthetic log datasets
-
-benches/
-  performance benchmarks
+| directory | what it does |
+|---|---|
+| `src/collector/` | reads raw logs from syslog and auth.log |
+| `src/parser/` | converts log lines into `TelemetryEvent` structs |
+| `src/threat_intel/` | enriches events with known threat indicators and MITRE mappings |
+| `src/analyzer/` | behavioral anomaly detection — login bursts, privilege escalation, suspicious processes |
+| `src/risk/` | weighted risk scoring engine |
+| `src/reports/` | builds the final `SecurityReport` with recommendations |
+| `src/api/` | Axum REST server exposing `/scan`, `/report`, `/timeline` |
+| `src/streaming/` | real-time log file monitoring |
+| `testdata/` | synthetic datasets (~2,400 events across linux and macos logs) |
 
 ---
 
-## API Endpoints
+## API
 
-| Endpoint        | Method | Description                     |
-| --------------- | ------ | ------------------------------- |
-| `/health`       | GET    | service information             |
-| `/docs`         | GET    | API documentation               |
-| `/scan`         | POST   | run full telemetry pipeline     |
-| `/report`       | GET    | retrieve latest security report |
-| `/timeline`     | GET    | attack timeline                 |
-| `/stream/start` | POST   | start real-time log streaming   |
-| `/stream/stop`  | POST   | stop streaming                  |
+| endpoint | method | description |
+|---|---|---|
+| `/health` | GET | service status |
+| `/scan` | POST | run the full telemetry pipeline |
+| `/report` | GET | retrieve the latest security report |
+| `/timeline` | GET | attack timeline from the latest scan |
+| `/stream/start` | POST | start real-time log streaming |
+| `/stream/stop` | POST | stop streaming |
 
 ---
 
-## Quick Start
+## quick start
 
-Clone this repository
-```
-git clone https://github.com/Aegoria/aegoria-rust.git
-cd aegoria-rust
-```
+```bash
+# build
+cargo build --release
 
-Build the project: 
-```
-cargo build
-```
-
-Run the telemetry engine:
-```
+# start the API server (port 3000)
 cargo run
-```
 
-The API Server witll start at: 
-```
-http://localhost:3000
-```
-
----
-
-## Example Commands
-
-Check service health:
-```
-curl http://localhost:3000/health | jq
-```
-
-View API documentation:
-```
-curl http://localhost:3000/docs | jq
-```
-
-Run a security scan:
-```
-curl -X POST http://localhost:3000/scan | jq
-```
-
-Retrieve the latest report:
-```
-curl http://localhost:3000/report | jq
-```
-
-View attack timeline:
-```
-curl http://localhost:3000/timeline | jq
-```
-
-Start real-time log monitoring:
-```
-curl -X POST http://localhost:3000/stream/start
-```
-
-Stop streaming:
-```
-curl -X POST http://localhost:3000/stream/stop
-```
-
---- 
-
-## Demo Mode
-
-You can run the pipeline against the included synthetic dataset.
-```
+# run against the included test dataset
 cargo run -- demo
-```
 
-This loads test logs, processes them through the full pipeline, and prints a formatted security report.
-
---- 
-
-## Running Tests
-
-Run all tests:
-```
+# run tests
 cargo test
-```
 
-Dataset pipeline tests:
-```
-cargo test --test dataset_pipeline_test
-```
-
-Code quality check:
-```
-cargo clippy --all-targets --all-features -- -D warnings
-```
-
-Format code:
-```
-cargo fmt
-```
-
---- 
-
-## Performance
-
-Benchmark the pipeline:
-```
+# benchmarks
 cargo bench
 ```
 
-Example benchmark results:
-```
-Full pipeline (10k events): ~3 ms
-Analysis only: ~0.28 ms
-Threat enrichment: ~1.6 ms
-Throughput: ~54k events/sec
-```
+the demo mode processes the synthetic dataset in `testdata/` and prints a full security report to stdout. useful for seeing what the engine produces without needing live system logs.
 
-## Synthetic Dataset
+---
 
-The repository includes generated datasets for testing.
+## tech
 
-```
-testdata/
-  linux/
-  macos/
-  windows/
-```
-
-The dataset includes:
-- SSH brute force attempts
-- privilege escalation events
-- suspicious process execution
-- network reconnaissance
-- system operations
-
-Total coverage:
-150 files
-~2,400 log events
-
-
-## Tech Stack
-Core engine
-- Rust
-- Tokio
-- Axum
-
-Testing and benchmarking
-- Criterion
-- Rust test framework
-
-Data format
-- JSON telemetry events
-
-## Current Status
-
-The telemetry engine currently supports:
-
-- full pipeline processing
-- real-time log streaming
-- threat intelligence enrichment
-- attack timeline reconstruction
-- structured security reporting
-- CLI testing tools
-- performance benchmarking
-
---- 
-
-## Improvements
-
-Planned extensions include:
-- machine learning anomaly detection
-- distributed log ingestion
-- external threat intelligence feeds
-- real-time alerting
-- advanced visualization dashboards
-
-thanks. please feel free to contact in case of doubt related to any steps or the pipeline.
+- Rust, Tokio, Axum
+- ~2,400 test events across 150 synthetic log files
+- full pipeline processes 10k events in ~3ms
+- 73 passing tests
