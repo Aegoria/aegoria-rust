@@ -23,8 +23,60 @@ use crate::reports::report_builder::SecurityReport;
 use crate::risk::scoring_engine::ScoringEngine;
 use crate::threat_intel::intel_engine::IntelEngine;
 
-pub async fn health() -> &'static str {
-    "ok"
+// enhanced health check with service info
+pub async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "service": "aegoria-telemetry-engine",
+        "version": env!("CARGO_PKG_VERSION"),
+        "runtime": "tokio",
+        "framework": "axum"
+    }))
+}
+
+// api documentation endpoint
+pub async fn docs() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "service": "aegoria telemetry engine",
+        "version": env!("CARGO_PKG_VERSION"),
+        "endpoints": [
+            {
+                "method": "GET",
+                "path": "/health",
+                "description": "service health check with version info"
+            },
+            {
+                "method": "GET",
+                "path": "/docs",
+                "description": "api documentation"
+            },
+            {
+                "method": "POST",
+                "path": "/scan",
+                "description": "trigger full pipeline scan of system logs"
+            },
+            {
+                "method": "GET",
+                "path": "/report",
+                "description": "retrieve latest security report"
+            },
+            {
+                "method": "GET",
+                "path": "/timeline",
+                "description": "retrieve attack timeline from latest report"
+            },
+            {
+                "method": "POST",
+                "path": "/stream/start",
+                "description": "start real-time log streaming"
+            },
+            {
+                "method": "POST",
+                "path": "/stream/stop",
+                "description": "stop real-time log streaming"
+            }
+        ]
+    }))
 }
 
 pub async fn get_report(State(state): State<AppState>) -> Result<Json<SecurityReport>, StatusCode> {
@@ -50,13 +102,13 @@ pub async fn post_scan(
     State(state): State<AppState>,
 ) -> Result<Json<ScanResponse>, (StatusCode, String)> {
     let start = Instant::now();
-    info!("scan triggered");
+    info!("pipeline: scan triggered");
 
     let config = &state.config;
     let max_lines = config.max_scan_lines;
     let device_id = "aegoria-local".to_string();
 
-    // collect + parse syslog
+    // stage 1: collect + parse syslog
     let mut all_events: Vec<TelemetryEvent> = Vec::new();
     let mut lines_collected: usize = 0;
 
@@ -70,15 +122,15 @@ pub async fn post_scan(
             }
         }
         info!(
-            "syslog: {} lines → {} events",
+            "pipeline: syslog collected {} lines, parsed {} events",
             lines.len(),
             all_events.len()
         );
     } else {
-        warn!("syslog collection failed, continuing");
+        warn!("pipeline: syslog collection failed, continuing");
     }
 
-    // collect + parse auth log
+    // stage 2: collect + parse auth log
     let authlog_path = Path::new(&config.authlog_path);
     let pre_count = all_events.len();
     if let Ok(lines) = AuthLogReader.collect(authlog_path, max_lines) {
@@ -90,31 +142,48 @@ pub async fn post_scan(
             }
         }
         info!(
-            "auth log: {} lines → {} events",
+            "pipeline: auth log collected {} lines, parsed {} events",
             lines.len(),
             all_events.len() - pre_count
         );
     } else {
-        warn!("auth log collection failed, continuing");
+        warn!("pipeline: auth log collection failed, continuing");
     }
 
     let events_parsed = all_events.len();
 
-    // enrich with threat intelligence
+    // stage 3: threat intelligence enrichment
     let intel = IntelEngine::default();
     intel.enrich_batch(&mut all_events);
+    info!("pipeline: threat enrichment complete");
 
-    // analyze
+    // stage 4: behavioral analysis
     let analysis = BehaviorEngine.analyze(&all_events);
     let events_analyzed = events_parsed;
+    info!(
+        "pipeline: analysis complete — {} bursts, {} escalations, {} correlations",
+        analysis.failed_logins,
+        analysis.privilege_escalations,
+        analysis.correlation_findings.len()
+    );
 
-    // score
+    // stage 5: risk scoring
     let risk = ScoringEngine.score(&analysis);
-    info!("risk score: {} ({:?})", risk.total_score, risk.level);
+    info!(
+        "pipeline: risk score {} ({:?})",
+        risk.total_score, risk.level
+    );
 
-    // recommendations + report
+    // stage 6: report generation
     let recommendations = RecommendationEngine.generate(&analysis);
-    let report = SecurityReport::build(&risk, &analysis, &all_events, recommendations);
+    let duration_ms = start.elapsed().as_millis();
+    let report = SecurityReport::build_with_latency(
+        &risk,
+        &analysis,
+        &all_events,
+        recommendations,
+        duration_ms,
+    );
 
     let risk_level_str = format!("{:?}", report.risk_level).to_lowercase();
     let risk_score_val = report.risk_score;
@@ -124,9 +193,8 @@ pub async fn post_scan(
         *stored = Some(report);
     }
 
-    let duration_ms = start.elapsed().as_millis();
     info!(
-        "scan complete: events={} duration_ms={}",
+        "pipeline: scan complete — {} events in {}ms",
         events_parsed, duration_ms
     );
 

@@ -32,7 +32,7 @@ impl Parser for AuthParser {
         let rest = parts.next().unwrap_or("");
 
         let (process_name, process_id, message) = parse_tag_and_message(rest);
-        let auth_info = classify_auth_event(&process_name, &message);
+        let auth_info = classify_auth_event(&process_name, &message)?;
 
         let mut event = TelemetryEvent::new(
             self.device_id.clone(),
@@ -81,13 +81,13 @@ fn parse_tag_and_message(rest: &str) -> (String, Option<u32>, String) {
     }
 }
 
-fn classify_auth_event(process_name: &str, message: &str) -> AuthInfo {
+fn classify_auth_event(process_name: &str, message: &str) -> anyhow::Result<AuthInfo> {
     let msg = message.to_lowercase();
     let pname = process_name.to_lowercase();
 
     // failed ssh password (T1110 brute force)
     if msg.starts_with("failed password") {
-        return AuthInfo {
+        return Ok(AuthInfo {
             event_type: EventType::Authentication,
             severity: Severity::High,
             username: extract_after(message, "for "),
@@ -95,12 +95,12 @@ fn classify_auth_event(process_name: &str, message: &str) -> AuthInfo {
             privilege_level: None,
             mitre_technique: Some("T1110".into()),
             port: extract_port(message),
-        };
+        });
     }
 
     // invalid user attempt (T1078 valid accounts)
     if msg.starts_with("invalid user") {
-        return AuthInfo {
+        return Ok(AuthInfo {
             event_type: EventType::Authentication,
             severity: Severity::High,
             username: extract_after(message, "user "),
@@ -108,12 +108,12 @@ fn classify_auth_event(process_name: &str, message: &str) -> AuthInfo {
             privilege_level: None,
             mitre_technique: Some("T1078".into()),
             port: extract_port(message),
-        };
+        });
     }
 
     // accepted login
     if msg.starts_with("accepted") {
-        return AuthInfo {
+        return Ok(AuthInfo {
             event_type: EventType::Authentication,
             severity: Severity::Low,
             username: extract_after(message, "for "),
@@ -121,12 +121,12 @@ fn classify_auth_event(process_name: &str, message: &str) -> AuthInfo {
             privilege_level: None,
             mitre_technique: None,
             port: extract_port(message),
-        };
+        });
     }
 
     // sudo usage (T1548 abuse elevation)
     if pname == "sudo" {
-        return AuthInfo {
+        return Ok(AuthInfo {
             event_type: EventType::PrivilegeEscalation,
             severity: Severity::Medium,
             username: message.split_whitespace().next().map(String::from),
@@ -134,12 +134,15 @@ fn classify_auth_event(process_name: &str, message: &str) -> AuthInfo {
             privilege_level: Some("root".into()),
             mitre_technique: Some("T1548".into()),
             port: None,
-        };
+        });
     }
 
-    // session opened
-    if msg.contains("session opened") {
-        return AuthInfo {
+    // pam session events
+    if pname.starts_with("pam_unix")
+        || msg.contains("session opened")
+        || msg.contains("session closed")
+    {
+        return Ok(AuthInfo {
             event_type: EventType::Authentication,
             severity: Severity::Info,
             username: extract_after(message, "for user "),
@@ -147,32 +150,11 @@ fn classify_auth_event(process_name: &str, message: &str) -> AuthInfo {
             privilege_level: None,
             mitre_technique: None,
             port: None,
-        };
+        });
     }
 
-    // session closed
-    if msg.contains("session closed") {
-        return AuthInfo {
-            event_type: EventType::Authentication,
-            severity: Severity::Info,
-            username: extract_after(message, "for user "),
-            source_ip: None,
-            privilege_level: None,
-            mitre_technique: None,
-            port: None,
-        };
-    }
-
-    // fallback
-    AuthInfo {
-        event_type: EventType::Authentication,
-        severity: Severity::Info,
-        username: None,
-        source_ip: None,
-        privilege_level: None,
-        mitre_technique: None,
-        port: None,
-    }
+    // not an auth event
+    anyhow::bail!("not a recognized auth log entry")
 }
 
 // extract first word after keyword

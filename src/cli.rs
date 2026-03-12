@@ -15,31 +15,62 @@ use aegoria_rust::reports::report_builder::SecurityReport;
 use aegoria_rust::risk::scoring_engine::ScoringEngine;
 use aegoria_rust::threat_intel::intel_engine::IntelEngine;
 
-// check if first arg is a testdata directory path
+const BANNER: &str = r#"
+     _    _____ ____ ___  ____  ___    _
+    / \  | ____/ ___/ _ \|  _ \|_ _|  / \
+   / _ \ |  _|| |  | | | | |_) || |  / _ \
+  / ___ \| |__| |__| |_| |  _ < | | / ___ \
+ /_/   \_|_____\____\___/|_| \_|___/_/   \_\
+
+ Observe. Detect. Protect.
+"#;
+
+// check if first arg is a cli command or directory path
 pub fn try_run() -> anyhow::Result<Option<anyhow::Result<()>>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         return Ok(None);
     }
 
-    let path = Path::new(&args[1]);
-    if !path.is_dir() {
-        return Ok(None);
+    let cmd = &args[1];
+
+    // demo command: load built-in testdata
+    if cmd == "demo" {
+        return Ok(Some(run_demo()));
     }
 
-    Ok(Some(run_dataset(path)))
+    // directory path: scan it
+    let path = Path::new(cmd);
+    if path.is_dir() {
+        return Ok(Some(run_dataset(path)));
+    }
+
+    Ok(None)
+}
+
+fn run_demo() -> anyhow::Result<()> {
+    println!("{}", BANNER);
+    println!(" [demo] loading synthetic dataset from testdata/\n");
+
+    let testdata = Path::new("testdata");
+    if !testdata.exists() {
+        anyhow::bail!("testdata/ directory not found. run from project root.");
+    }
+
+    run_dataset(testdata)
 }
 
 fn run_dataset(dir: &Path) -> anyhow::Result<()> {
     let start = Instant::now();
-    info!("scanning dataset directory: {}", dir.display());
+    info!("cli: scanning directory {}", dir.display());
 
-    let log_parser = LogParser::new("dataset-test".into());
-    let auth_parser = AuthParser::new("dataset-test".into());
+    let log_parser = LogParser::new("cli-scan".into());
+    let auth_parser = AuthParser::new("cli-scan".into());
     let intel = IntelEngine::default();
 
     let mut all_events: Vec<TelemetryEvent> = Vec::new();
     let mut files_processed = 0u32;
+    let mut lines_read = 0u32;
 
     for entry in WalkDir::new(dir)
         .into_iter()
@@ -58,7 +89,7 @@ fn run_dataset(dir: &Path) -> anyhow::Result<()> {
             if trimmed.is_empty() {
                 continue;
             }
-            // try auth parser first, fall back to syslog parser
+            lines_read += 1;
             let event = auth_parser
                 .parse(trimmed)
                 .or_else(|_| log_parser.parse(trimmed));
@@ -70,25 +101,34 @@ fn run_dataset(dir: &Path) -> anyhow::Result<()> {
     }
 
     info!(
-        "parsed {} events from {} files",
+        "cli: parsed {} events from {} files ({} lines)",
         all_events.len(),
-        files_processed
+        files_processed,
+        lines_read
     );
 
     // analyze
+    info!("cli: running behavioral analysis");
     let analysis = BehaviorEngine.analyze(&all_events);
+
+    info!("cli: computing risk score");
     let risk = ScoringEngine.score(&analysis);
+
     let recs = RecommendationEngine.generate(&analysis);
-    let report = SecurityReport::build(&risk, &analysis, &all_events, recs);
+    let elapsed_ms = start.elapsed().as_millis();
+    let report =
+        SecurityReport::build_with_latency(&risk, &analysis, &all_events, recs, elapsed_ms);
 
     let json = serde_json::to_string_pretty(&report)?;
     println!("{}", json);
 
     let elapsed = start.elapsed();
-    info!(
-        "dataset scan complete: {} events, score={}, duration={:?}",
+    eprintln!(
+        "\n--- scan complete: {} files, {} events, score={}, level={:?}, duration={:?} ---",
+        files_processed,
         all_events.len(),
         risk.total_score,
+        risk.level,
         elapsed
     );
 
